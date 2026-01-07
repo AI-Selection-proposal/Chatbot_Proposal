@@ -1,0 +1,14 @@
+hf_cache/
+chroma/
+data/
+.env
+__pycache__/
+*.pyc
+node_modules/
+.next/
+lib
+bin
+lib64
+pyvenv.cfg
+include
+share
