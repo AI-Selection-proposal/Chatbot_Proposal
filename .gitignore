@@ -1,7 +1,6 @@
 hf_cache/
 chroma/
 data/
-.env
 __pycache__/
 *.pyc
 node_modules/

@@ -33,7 +33,7 @@ source bin/activate
 
 ```bash
 pip install -r requirements.txt
-pip install vllm
+pip install -U vllm
 ```
 
 ---
