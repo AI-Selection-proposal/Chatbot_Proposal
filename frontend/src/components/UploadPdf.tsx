@@ -56,16 +56,17 @@ export default function UploadPdf({
         onClick={onUpload}
         disabled={!file || busy}
         style={{
-          padding: "8px 12px",
-          borderRadius: 10,
-          background: !file || busy ? "rgba(255,255,255,0.06)" : "#24324a",
-          color: "#e6eefc",
-          border: "1px solid rgba(255,255,255,0.12)",
+          padding: "8px 16px",
+          borderRadius: 8,
+          background: !file || busy ? "#e0e0e0" : "#1976d2",
+          color: "#ffffff",
+          border: "none",
           cursor: !file || busy ? "not-allowed" : "pointer",
-          fontSize: 13
+          fontSize: 13,
+          fontWeight: 600
         }}
       >
-        {busy ? "Uploading..." : "Upload PDF"}
+        {busy ? "📤 Mengupload..." : "📁 Upload PDF"}
       </button>
 
       {err ? (

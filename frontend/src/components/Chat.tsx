@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import UploadPdf from "./UploadPdf";
 import MessageList, { ChatMessage } from "./Message";
 import Composer from "./Composer";
@@ -12,22 +12,31 @@ export default function Chat() {
     {
       role: "assistant",
       content:
-        "Hi! *Upload a PDF*, **then enable** “Ask Document” to query it. I will stream answers."
+        "Selamat datang di **Diksaintek Chatbot** 👋\n\nSilakan *upload dokumen PDF* untuk memulai. Saya siap membantu Anda menganalisis dan menjawab pertanyaan tentang dokumen Anda."
     }
   ]);
 
   const [docId, setDocId] = useState<string>("");
   const [askDoc, setAskDoc] = useState<boolean>(false);
   const [useImages, setUseImages] = useState<boolean>(true);
+  const [darkMode, setDarkMode] = useState<boolean>(false);
 
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const chatAreaRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto scroll ketika ada pesan baru
+  useEffect(() => {
+    if (chatAreaRef.current) {
+      chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight;
+    }
+  }, [messages]);
 
   const canAskDoc = askDoc && !!docId;
 
   const headerHint = useMemo(() => {
-    if (!docId) return "No PDF loaded";
-    return `Active doc_id: ${docId}`;
+    if (!docId) return "Belum ada dokumen";
+    return `Dokumen aktif: ${docId.slice(0, 12)}...`;
   }, [docId]);
 
   function appendMessage(msg: ChatMessage) {
@@ -62,20 +71,34 @@ export default function Chat() {
     const abort = new AbortController();
     abortRef.current = abort;
 
-    const handle = (p: SsePayload) => {
-      if (p.type === "delta") updateLastAssistant(p.text);
-      if (p.type === "done") {
-        setBusy(false);
-        abortRef.current = null;
-      }
-    };
-
     try {
       if (canAskDoc) {
-        await streamAskPdf(docId, text.trim(), useImages, handle, abort.signal);
+        for await (const payload of streamAskPdf(docId, text.trim(), useImages, abort.signal)) {
+          if (payload.type === "delta" && payload.text) {
+            updateLastAssistant(payload.text);
+          } else if (payload.type === "done") {
+            setBusy(false);
+            abortRef.current = null;
+          } else if (payload.type === "error") {
+            throw new Error(payload.error || "Stream error");
+          }
+        }
       } else {
-        await streamChat(text.trim(), handle, abort.signal);
+        const messages = [{ role: "user", content: text.trim() }];
+        for await (const payload of streamChat(messages, abort.signal)) {
+          if (payload.type === "delta" && payload.text) {
+            updateLastAssistant(payload.text);
+          } else if (payload.type === "done") {
+            setBusy(false);
+            abortRef.current = null;
+          } else if (payload.type === "error") {
+            throw new Error(payload.error || "Stream error");
+          }
+        }
       }
+      // Ensure busy is false if loop completes
+      setBusy(false);
+      abortRef.current = null;
     } catch (e: any) {
       // On error, end busy + show error in assistant
       setBusy(false);
@@ -91,44 +114,62 @@ export default function Chat() {
       style={{
         display: "grid",
         gridTemplateRows: "auto 1fr auto",
-        height: "100vh"
+        height: "100vh",
+        background: darkMode ? "#1a1a2e" : "#f5f7fa"
       }}
     >
       {/* Top bar */}
       <div
         style={{
-          padding: "12px 16px",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-          background: "#0b0f17",
+          padding: "16px 24px",
+          borderBottom: "2px solid #1e88e5",
+          background: "linear-gradient(135deg, #1565c0 0%, #1e88e5 100%)",
           position: "sticky",
           top: 0,
-          zIndex: 10
+          zIndex: 10,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.15)"
         }}
       >
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <div style={{ fontWeight: 700, letterSpacing: 0.2 }}>
-            PDF VLM RAG Demo
+          <div style={{ fontWeight: 700, fontSize: 18, letterSpacing: 0.3, color: "#fff" }}>
+            🎓 Diksaintek Chatbot
           </div>
-          <div style={{ opacity: 0.7, fontSize: 12 }}>{headerHint}</div>
+          <div style={{ opacity: 0.9, fontSize: 13, color: "#e3f2fd" }}>{headerHint}</div>
           <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
-            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 6,
+                background: "rgba(255,255,255,0.2)",
+                color: "#fff",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 16,
+                fontWeight: 500
+              }}
+              title={darkMode ? "Light Mode" : "Dark Mode"}
+            >
+              {darkMode ? "🌞" : "🌙"}
+            </button>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", color: "#fff" }}>
               <input
                 type="checkbox"
                 checked={askDoc}
                 onChange={(e) => setAskDoc(e.target.checked)}
               />
-              <span style={{ fontSize: 13 }}>Ask Document</span>
+              <span style={{ fontSize: 13 }}>Mode Dokumen</span>
             </label>
 
-            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", color: "#fff" }}>
               <input
                 type="checkbox"
                 checked={useImages}
                 onChange={(e) => setUseImages(e.target.checked)}
                 disabled={!askDoc}
               />
-              <span style={{ fontSize: 13, opacity: askDoc ? 1 : 0.5 }}>
-                Include Page Images
+              <span style={{ fontSize: 13, opacity: askDoc ? 1 : 0.6 }}>
+                Sertakan Gambar
               </span>
             </label>
 
@@ -136,16 +177,18 @@ export default function Chat() {
               onClick={stop}
               disabled={!busy}
               style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                background: busy ? "#24324a" : "rgba(255,255,255,0.06)",
-                color: "#e6eefc",
-                border: "1px solid rgba(255,255,255,0.12)",
+                padding: "6px 14px",
+                borderRadius: 6,
+                background: busy ? "#d32f2f" : "rgba(255,255,255,0.2)",
+                color: "#fff",
+                border: "none",
                 cursor: busy ? "pointer" : "not-allowed",
-                fontSize: 13
+                opacity: busy ? 1 : 0.5,
+                fontSize: 13,
+                fontWeight: 500
               }}
             >
-              Stop
+              ⏸️ Stop
             </button>
           </div>
         </div>
@@ -160,12 +203,12 @@ export default function Chat() {
               appendMessage({
                 role: "assistant",
                 content:
-                  `PDF ingested ✅\n` +
-                  `• filename: ${res.filename}\n` +
-                  `• pages: ${res.pages}\n` +
-                  `• chunks: ${res.chunks_upserted}\n` +
-                  `• doc_id: ${res.doc_id}\n\n` +
-                  `Now ask questions with “Ask Document” enabled.`
+                  `✅ **Dokumen berhasil diupload!**\n\n` +
+                  `📄 **File:** ${res.filename}\n` +
+                  `📊 **Halaman:** ${res.pages}\n` +
+                  `🔍 **Chunks:** ${res.chunks_upserted}\n` +
+                  `🆔 **ID:** ${res.doc_id}\n\n` +
+                  `Silakan aktifkan **"Mode Dokumen"** dan tanyakan apapun tentang dokumen Anda! 🚀`
               });
             }}
           />
@@ -173,23 +216,36 @@ export default function Chat() {
       </div>
 
       {/* Chat area */}
-      <div style={{ overflow: "auto" }}>
-        <MessageList messages={messages} />
+      <div 
+        ref={chatAreaRef}
+        style={{ 
+          overflow: "auto", 
+          background: darkMode ? "#1a1a2e" : "#f5f7fa" 
+        }}
+      >
+        <MessageList messages={messages} darkMode={darkMode} />
       </div>
 
       {/* Composer */}
       <div
         style={{
           padding: 14,
-          borderTop: "1px solid rgba(255,255,255,0.08)",
-          background: "#0b0f17"
+          borderTop: darkMode ? "2px solid #333" : "2px solid #e0e0e0",
+          background: darkMode ? "#16213e" : "#ffffff"
         }}
       >
-        <Composer busy={busy} onSend={onSend} />
-        <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
-          Mode:{" "}
-          <b>{canAskDoc ? "PDF Q&A (RAG + Vision)" : "Chat (no document)"}</b>
-          {askDoc && !docId ? " — upload a PDF first." : ""}
+        <Composer busy={busy} onSend={onSend} darkMode={darkMode} />
+        <div style={{ 
+          marginTop: 8, 
+          fontSize: 12, 
+          opacity: 0.7, 
+          color: darkMode ? "#90caf9" : "#666" 
+        }}>
+          📍 Mode:{" "}
+          <b style={{ color: darkMode ? "#64b5f6" : "#1976d2" }}>
+            {canAskDoc ? "Analisis Dokumen (RAG + Vision)" : "Chat Umum"}
+          </b>
+          {askDoc && !docId ? " — Silakan upload dokumen terlebih dahulu" : ""}
         </div>
       </div>
     </div>
