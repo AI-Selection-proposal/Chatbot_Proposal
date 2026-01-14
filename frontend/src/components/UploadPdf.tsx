@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { uploadPdf, UploadPdfResult } from "@/lib/api";
+import { uploadPdf, UploadPdfResult } from "@/services/api";
 
 export default function UploadPdf({
   onUploaded

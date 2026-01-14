@@ -4,8 +4,8 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import UploadPdf from "./UploadPdf";
 import MessageList, { ChatMessage } from "./Message";
 import Composer from "./Composer";
-import { streamAskPdf, streamChat } from "@/lib/api";
-import type { SsePayload } from "@/lib/sse";
+import { streamAskPdf, streamChat } from "@/services/api";
+import type { SsePayload } from "@/services/sse";
 
 export default function Chat() {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -84,7 +84,7 @@ export default function Chat() {
           }
         }
       } else {
-        const messages = [{ role: "user", content: text.trim() }];
+        const messages: ChatMessage[] = [{ role: "user", content: text.trim() }];
         for await (const payload of streamChat(messages, abort.signal)) {
           if (payload.type === "delta" && payload.text) {
             updateLastAssistant(payload.text);
