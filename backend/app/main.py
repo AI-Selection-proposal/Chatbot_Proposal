@@ -156,6 +156,57 @@ def create_app() -> FastAPI:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
+    # Streaming chat endpoint
+    from fastapi.responses import StreamingResponse
+    import json
+    import asyncio
+
+    @app.post("/chat/stream")
+    async def chat_stream(chat_msg: ChatMessage):
+        """Stream chat responses with context from ChromaDB"""
+        async def generate():
+            try:
+                context = ""
+                if chat_msg.use_context:
+                    # Retrieve relevant documents
+                    results = collection.query(
+                        query_texts=[chat_msg.message],
+                        n_results=3
+                    )
+                    if results["documents"][0]:
+                        context = "\n\n".join(results["documents"][0])
+
+                # Build prompt
+                if context:
+                    prompt = f"Based on the following context, answer the question.\n\nContext:\n{context}\n\nQuestion: {chat_msg.message}\nAnswer:"
+                else:
+                    prompt = chat_msg.message
+
+                # Optionally send context info first
+                if context:
+                    yield f"data: {{\"type\": \"context\", \"content\": {json.dumps(context)} }}\n\n"
+
+                # Stream from vLLM
+                stream = client.chat.completions.create(
+                    model="meta-llama/Llama-2-7b-chat-hf",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=500,
+                    temperature=0.7,
+                    stream=True
+                )
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        content = chunk.choices[0].delta.content
+                        yield f"data: {{\"type\": \"token\", \"content\": {json.dumps(content)} }}\n\n"
+                    await asyncio.sleep(0)  # Allow other tasks to run
+                # Send completion signal
+                yield f"data: {{\"type\": \"done\"}}\n\n"
+            except Exception as e:
+                yield f"data: {{\"type\": \"error\", \"content\": {json.dumps(str(e))} }}\n\n"
+        return StreamingResponse(generate(), media_type="text/event-stream")
     # Override/Update Health Route
     @app.get("/health_status")
     async def health_status():
